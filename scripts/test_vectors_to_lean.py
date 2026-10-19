@@ -8,12 +8,14 @@ Writes the Lean module of one fixture to stdout:
 
   poseidon    `test-vectors/json/orchard_poseidon.json`, `orchard_poseidon_hash.json`, and the
               round constants, MDS matrix and capacity element of the generator
-              `zcash_test_vectors/orchard/poseidon.py`.
+              `zcash_test_vectors/orchard/poseidon.py`;
+  generators  `test-vectors/json/orchard_generators.json`, the compressed point encodings.
 
 Nothing from the checkout is imported or executed: the JSON is parsed with `json`, and the
 generator's constants are read from its syntax tree with `ast`. Field elements in the JSON are
 32-byte little-endian encodings; each is decoded to an integer and must be canonical (below the
-Pallas base-field modulus), otherwise the script fails.
+Pallas base-field modulus), otherwise the script fails; so must the x-coordinate of each point
+encoding.
 
 `<revision>` is only recorded in the output; `regenerate-test-vectors.sh` checks that the
 checkout is at that revision.
@@ -226,7 +228,47 @@ def render_poseidon(root, rev):
     return out
 
 
-FIXTURES = {"poseidon": render_poseidon}
+GENERATOR_COLUMNS = ["skb", "nkb", "vcvb", "vcrb", "cmb", "cmq", "ivkb", "ivkq", "mcq"]
+
+
+def render_generators(root, rev):
+    rows = load_rows(os.path.join(root, "test-vectors/json/orchard_generators.json"),
+                     ", ".join(GENERATOR_COLUMNS))
+    if len(rows) != 1 or len(rows[0]) != len(GENERATOR_COLUMNS):
+        die(f"orchard_generators: expected one row of {len(GENERATOR_COLUMNS)} encodings")
+    enc = []
+    for name, hexstr in zip(GENERATOR_COLUMNS, rows[0]):
+        n = le_int(hexstr, f"orchard_generators.{name}")
+        if n % 2 ** 255 >= PALLAS_P:
+            die(f"orchard_generators.{name}: non-canonical x-coordinate (>= p)")
+        enc.append((name, n))
+
+    out = module_header(rev, "OrchardGenerators", "Orchard generators", [
+        "The `orchard_generators` vector of",
+        "[zcash-test-vectors](https://github.com/zcash/zcash-test-vectors) at revision",
+        f"`{rev}`: the compressed encodings of the Orchard fixed bases and",
+        "Sinsemilla domain points.",
+        "",
+        "Each encoding is the integer its 32 bytes denote little-endian: the x-coordinate in the",
+        "low 255 bits and the parity of the y-coordinate in bit 255.",
+        "`scripts/regenerate-test-vectors.sh` regenerates this file byte-for-byte.",
+    ])
+    w = out.append
+    w("/-- The `orchard_generators` columns, each a compressed point encoding. -/")
+    w("structure Encodings where")
+    for name, _ in enc:
+        w(f"  {name} : Nat")
+    w("")
+    w("/-- `orchard_generators.json` (one vector). -/")
+    w("def generators : Encodings where")
+    for name, n in enc:
+        w(f"  {name} := {hex64(n)}")
+    w("")
+    w(f"end {NAMESPACE}.OrchardGenerators")
+    return out
+
+
+FIXTURES = {"poseidon": render_poseidon, "generators": render_generators}
 
 
 def main():

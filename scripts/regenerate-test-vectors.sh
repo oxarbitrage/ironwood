@@ -39,6 +39,7 @@ MANIFEST=$DIR/MANIFEST.tsv
 # Each fixture: the converter's fixture name and the module it renders.
 FIXTURES=(
   "poseidon $DIR/OrchardPoseidonData.lean"
+  "generators $DIR/OrchardGeneratorsData.lean"
 )
 GENERATOR=scripts/test_vectors_to_lean.py
 SOURCE=zcash/zcash-test-vectors@$ZTV_COMMIT
